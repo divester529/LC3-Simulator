@@ -1,32 +1,19 @@
+#define DEBUG
+
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
-/* 16 LC3 operations */
-#define ADD 1
-#define AND 2
-#define BR 3
-#define JMP 4
-#define JSR 5
-#define LD 6
-#define LDI 7
-#define LDR 8
-#define LEA 9
-#define NOT 10
-#define RET 11
-#define RTI 12
-#define ST 13
-#define STI 14
-#define STR 15
-#define TRAP 16
+/* LC3 Operations */
+#define ADD 0x001
 
 /* LC3 Data types */
-typedef unsigned char BYTE;
-typedef unsigned long WORD;
+typedef char BYTE;
+typedef unsigned int WORD;
 
 /* LC3 Machine */
 typedef struct
 {
-  WORD R[8]; /* 8 4-Bit data registers */
+  WORD R[8]; /* 8 16-Bit data registers */
   WORD IR; /* 16-Bit instruction register */ 
   WORD PC; /* 16-Bit program counter */
   
@@ -46,14 +33,14 @@ void killMachine(LC3* lc3);
 void showStatus(LC3* lc3)
 {
   int i;
-  printf("-----------------LC3 STATUS------------------\n");
+  printf("-----------------LC3 STATUS--------------------\n");
  
-  printf("PC:  0x%04lX\t\tIR:  0x%04lX\n", lc3->PC, lc3->IR);
-  printf("MAR: 0x%04lX\t\tMDR: 0x%04lX\n", lc3->MAR, lc3->MDR);
+  printf("PC:  0x%04X\t\tIR:  0x%04X\n", lc3->PC, lc3->IR);
+  printf("MAR: 0x%04X\t\tMDR: 0x%04X\n", lc3->MAR, lc3->MDR);
   
   for(i = 0; i < 8; i+=4)
     {
-      printf("r%d: 0x%04lX\tr%d: 0x%04lX\tr%d: 0x%04lX\tr%d: 0x%04lX\n", i, lc3->R[i], i+1, lc3->R[i+1], i+2, lc3->R[i+2], i+3, lc3->R[i+3]);
+      printf("r%d: 0x%04X\tr%d: 0x%04X\tr%d: 0x%04X\tr%d: 0x%04X\n", i, lc3->R[i], i+1, lc3->R[i+1], i+2, lc3->R[i+2], i+3, lc3->R[i+3]);
     }
   
   printf("-----------------------------------------------\n");
@@ -71,20 +58,26 @@ WORD fetch(LC3* lc3);
 
 BYTE decode(WORD instruc);
 
+void execute(LC3* lc3, BYTE opcode);
+
 int main(int argc, char* args[])
 {
   LC3 lc3;
 
   initMachine(&lc3);
 
-  WORD instruc = 0x99E;
+  WORD instruc = 0x193E;
   
   lc3.mem[0]=instruc;
-
+  lc3.mem[1]=instruc;
+  lc3.mem[2]=instruc;
+  
   showStatus(&lc3);
  
   next(&lc3);
-
+  next(&lc3);
+  next(&lc3);
+  
   showStatus(&lc3);
   
   killMachine(&lc3);
@@ -97,7 +90,7 @@ void next(LC3* lc3)
   lc3->IR = fetch(lc3);
   opcode=decode(lc3->IR);
 
-  printf("%d\n", opcode);
+  execute(lc3, opcode);
 }
 
 WORD fetch(LC3* lc3)
@@ -110,28 +103,43 @@ WORD fetch(LC3* lc3)
 
 BYTE decode(WORD instruc)
 {
-  BYTE opcode = instruc >> 11; // Bit-shift to get opcode of instruction
+  BYTE opcode = instruc >> 12; // Bit-shift to get opcode of instruction
   
-  /* OPCODES
-   * 0001 0x01 ADD
-   * 0101 0x11 AND
-   * 0000 0x00 BR
-   * 1100 0xB0 JMP
-   * 0100 0x10 
-   */
+  return opcode;
+}
+
+void execute(LC3* lc3, BYTE opcode)
+{
   switch(opcode)
     {
-    case 0x01:
-      return ADD;
+    case ADD:
+      printf("0x%02X ADD\n", opcode);
+      /* Bit mask IR[16:8] with 0xF8 and then subtract 0xF8 to isolate the 3 bits for the register number */
+      BYTE DR = (lc3->IR >> 9 | 0xF8)-0xF8; 
+      BYTE SR = (lc3->IR >> 6 | 0xF8)-0xF8;
+      /* If mode bit IR[5]=1 then immediate mode, if 0, register mode*/
+      BYTE MODE = (lc3->IR >> 5 | 0xFE)-0xFE;
+
+      if(MODE){
+	/* Sign bit IR[4] */
+	BYTE SIGN = (lc3->IR >> 4 | 0xFE)-0xFE; 
+	/* Immediate value IR[3:0] */
+	BYTE IM = (lc3->IR | 0xF0)-0xF0;
+
+	if(SIGN)
+	  IM=IM+0xF0;
+	
+	lc3->R[DR]=lc3->R[SR]+IM;
+
+	#ifdef DEBUG
+	printf("Dest: r%d\tSrc: r%d\nSign %c\t\tImm: %d\n", DR, SR, SIGN?'-':'+', IM);
+	printf("r%d: %d\n", DR, (int)lc3->R[DR]);
+	#endif
+      }else{
+	
+
+      }
       break;
-    case 0x11:
-      return AND;
-      break;
-    case 0x00:
-      return BR;
-    break;
-    default:
-      return -1;
     }
 }
 
